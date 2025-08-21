@@ -78,6 +78,8 @@ fun GridTaggingScreen(
     var showCropScreen by remember { mutableStateOf(false) }
     var cropRect by remember { mutableStateOf<Rect?>(null) }
 
+    var showCroppedGrid by remember { mutableStateOf(false) }
+
     // Zoom screen logic
     Scaffold(
         topBar = {
@@ -181,9 +183,23 @@ fun GridTaggingScreen(
                 imageBitmap = imageBitmap,
                 onCropConfirmed = { rect ->
                     cropRect = rect
+                    showCroppedGrid = true
                     showCropScreen = false
                 },
                 onCancel = { showCropScreen = false }
+            )
+        }
+
+        if (showCroppedGrid && cropRect != null) {
+            CroppedGridScreen(
+                imageBitmap = imageBitmap,
+                cropRect = cropRect!!,
+                woodPileData = woodPileData,
+                scalingInfo = scalingInfo,
+                onBack = {
+                    showCroppedGrid = false
+                    cropRect = null
+                }
             )
         }
     }
@@ -422,4 +438,264 @@ fun ZoomedGridScreen(
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CroppedGridScreen(
+    modifier: Modifier = Modifier,
+    imageBitmap: ImageBitmap,
+    cropRect: Rect,
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo,
+    onBack: () -> Unit
+) {
+    var selectedGrid by remember { mutableStateOf<GridRect?>(null) }
+    var selectedTapOffset by remember { mutableStateOf<Offset?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showSheet by remember { mutableStateOf(false) }
+    var screenState by remember { mutableStateOf("grid") }
+    val gridDots = remember { mutableStateListOf<GridDot>() }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Cropped Grid View") },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        if (screenState == "zoom") {
+                            screenState = "grid"
+                        } else {
+                            onBack()
+                        }
+                    }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = modifier
+                .padding(innerPadding)
+                .fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (screenState == "zoom" && selectedGrid != null) {
+                ZoomedGridScreen(
+                    imageBitmap = imageBitmap,
+                    grid = selectedGrid!!,
+                    gridDots = gridDots,
+                    scalingInfo = scalingInfo,
+                    onBack = { screenState = "grid" },
+                    onTap = { offset, size ->
+                        selectedTapOffset = Offset(
+                            x = offset.x / size.width,
+                            y = offset.y / size.height
+                        )
+                        showSheet = true
+                    }
+                )
+
+                // Bottom sheet for tag selection
+                if (showSheet && selectedTapOffset != null) {
+                    ModalBottomSheet(
+                        onDismissRequest = { showSheet = false },
+                        sheetState = sheetState
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("Pilih Abnormalitas", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            TagType.entries.forEach { tag ->
+                                Button(
+                                    onClick = {
+                                        gridDots.add(
+                                            GridDot(
+                                                selectedGrid!!,
+                                                selectedTapOffset!!,
+                                                tag
+                                            )
+                                        )
+                                        showSheet = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = tag.color)
+                                ) {
+                                    Text(tag.name)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                CroppedGridImage(
+                    modifier = Modifier.fillMaxSize(),
+                    imageBitmap = imageBitmap,
+                    cropRect = cropRect,
+                    woodPileData = woodPileData,
+                    gridDots = gridDots,
+                    onClickGrid = {
+                        selectedGrid = it
+                        screenState = "zoom"
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CroppedGridImage(
+    modifier: Modifier,
+    imageBitmap: ImageBitmap,
+    cropRect: Rect,
+    woodPileData: WoodPileData,
+    gridDots: SnapshotStateList<GridDot>,
+    onClickGrid: (gridRect: GridRect?) -> Unit,
+) {
+    var imageDrawParams by remember { mutableStateOf<ImageDrawParams?>(null) }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures { tapOffset ->
+                    imageDrawParams?.let { params ->
+                        // Map tapOffset to image coordinates
+                        val inImageX = ((tapOffset.x - params.left) / params.scale)
+                            .coerceIn(0f, imageBitmap.width.toFloat())
+                        val inImageY = ((tapOffset.y - params.top) / params.scale)
+                            .coerceIn(0f, imageBitmap.height.toFloat())
+
+                        // Find which grid cell was tapped within the new crop area
+                        val gridRect = findGridInNewCropArea(
+                            Offset(inImageX, inImageY),
+                            cropRect,
+                            woodPileData
+                        )
+
+                        gridRect?.let {
+                            onClickGrid.invoke(gridRect)
+                        }
+                    }
+                }
+            }
+    ) {
+        // Calculate scale and position to fit full image in canvas
+        val scale = minOf(
+            size.width / imageBitmap.width,
+            size.height / imageBitmap.height
+        )
+        val imageWidth = imageBitmap.width * scale
+        val imageHeight = imageBitmap.height * scale
+        val left = (size.width - imageWidth) / 2f
+        val top = (size.height - imageHeight) / 2f
+
+        // Save for tap mapping
+        imageDrawParams = ImageDrawParams(left, top, scale)
+
+        // Draw the full image, centered and scaled
+        withTransform({
+            translate(left, top)
+            scale(scale, scale)
+        }) {
+            drawImage(imageBitmap)
+
+            val strokeWidth = 3f / scale
+
+            // Step 1: Draw red outer box using the crop rectangle
+            drawRect(
+                color = Color.Red,
+                topLeft = Offset(cropRect.left, cropRect.top),
+                size = Size(cropRect.width, cropRect.height),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth * 2)
+            )
+
+            // Step 2: Create grid lines inside the crop rectangle
+            val verticalCount = woodPileData.gridLines.vertical.size
+            val horizontalCount = woodPileData.gridLines.horizontal.size
+
+            // Calculate grid cell dimensions within the crop area
+            val cellWidth = cropRect.width / (verticalCount + 1)
+            val cellHeight = cropRect.height / (horizontalCount + 1)
+
+            // Draw vertical grid lines within the crop area
+            for (i in 1..verticalCount) {
+                val x = cropRect.left + (i * cellWidth)
+                drawLine(
+                    color = Color.Yellow,
+                    start = Offset(x, cropRect.top),
+                    end = Offset(x, cropRect.bottom),
+                    strokeWidth = strokeWidth
+                )
+            }
+
+            // Draw horizontal grid lines within the crop area
+            for (i in 1..horizontalCount) {
+                val y = cropRect.top + (i * cellHeight)
+                drawLine(
+                    color = Color.Yellow,
+                    start = Offset(cropRect.left, y),
+                    end = Offset(cropRect.right, y),
+                    strokeWidth = strokeWidth
+                )
+            }
+
+            // Draw existing grid dots
+            gridDots.forEach { dot ->
+                val rect = dot.grid.rect
+                val position = Offset(
+                    rect.left + dot.percentOffset.x * rect.width,
+                    rect.top + dot.percentOffset.y * rect.height
+                )
+                drawCircle(
+                    color = dot.tagType.color,
+                    radius = 20f / scale,
+                    center = position
+                )
+            }
+        }
+    }
+}
+
+// Helper function to find grid cell within the new crop area
+private fun findGridInNewCropArea(
+    tapOffset: Offset,
+    cropRect: Rect,
+    woodPileData: WoodPileData
+): GridRect? {
+    // Check if tap is within the crop rectangle
+    if (!cropRect.contains(tapOffset)) {
+        return null
+    }
+
+    val verticalCount = woodPileData.gridLines.vertical.size
+    val horizontalCount = woodPileData.gridLines.horizontal.size
+
+    // Calculate grid cell dimensions within the crop area
+    val cellWidth = cropRect.width / (verticalCount + 1)
+    val cellHeight = cropRect.height / (horizontalCount + 1)
+
+    // Calculate relative position within the crop area
+    val relativeX = tapOffset.x - cropRect.left
+    val relativeY = tapOffset.y - cropRect.top
+
+    val col = (relativeX / cellWidth).toInt()
+    val row = (relativeY / cellHeight).toInt()
+
+    if (col >= 0 && row >= 0 && col <= verticalCount && row <= horizontalCount) {
+        val rect = Rect(
+            Offset(
+                cropRect.left + (col * cellWidth),
+                cropRect.top + (row * cellHeight)
+            ),
+            Offset(
+                cropRect.left + ((col + 1) * cellWidth),
+                cropRect.top + ((row + 1) * cellHeight)
+            )
+        )
+        return GridRect(row, col, rect)
+    }
+
+    return null
 }
