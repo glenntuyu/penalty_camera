@@ -1,0 +1,203 @@
+{
+  "statusCode": 200,
+  "statusDesc": "OK",
+  "message": "Success",
+  "data": [
+    {
+      "WoodPltID": "M34",
+      "WoodPltUoM": "Truk",
+      "WoodPltVal": 2000.00,
+      "WoodPltName": "Campur Diameter Lain (HTI Kulit) < 5%",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M35",
+      "WoodPltUoM": "Persen",
+      "WoodPltVal": 20.00,
+      "WoodPltName": "Campur Diameter Lain (HTI Kulit) > 5%",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M36",
+      "WoodPltUoM": "Truk",
+      "WoodPltVal": 500.00,
+      "WoodPltName": "HTI Debark (Kupas) campur HTI Bark (Kulit) < 5%",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M38",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 150.00,
+      "WoodPltName": "Campur Tunggul",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M48",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 150.00,
+      "WoodPltName": "Banir",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M51",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 150.00,
+      "WoodPltName": "Panjang Tidak Standard",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M54",
+      "WoodPltUoM": "Pcs",
+      "WoodPltVal": 5000.00,
+      "WoodPltName": "Paku, Roll Besi, Besi Segitiga",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M55",
+      "WoodPltUoM": "Pcs",
+      "WoodPltVal": 1000.00,
+      "WoodPltName": "Sling, Karung, Tali, Batu",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M56",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 150.00,
+      "WoodPltName": "Patahan Kayu (Broken Wood/Cutting)",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M58",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 1000.00,
+      "WoodPltName": "Normal Wood Mixed Black Wood dari District",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M59",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 150.00,
+      "WoodPltName": "Normal Wood Mixed Black Wood dari Jetty",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "M61",
+      "WoodPltUoM": "Pcs",
+      "WoodPltVal": 5000.00,
+      "WoodPltName": "Sling, Karung, Tali, Batu (Kayu Kalimantan)",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "N/A",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 0.00,
+      "WoodPltName": "Not Available",
+      "WoodPltGrp": "B"
+    },
+    {
+      "WoodPltID": "P03",
+      "WoodPltUoM": "Kg",
+      "WoodPltVal": 10.00,
+      "WoodPltName": "Ranting",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P30",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 150.00,
+      "WoodPltName": "Campur Kayu HTI",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P37",
+      "WoodPltUoM": "Truk",
+      "WoodPltVal": 500.00,
+      "WoodPltName": "HTI Debark (Kupas) campur HTI Bark (Kulit) > 5%",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P41",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 1000.00,
+      "WoodPltName": "Terbakar",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P42",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 300.00,
+      "WoodPltName": "Mati Serat, Mata Kayu",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P43",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 10.00,
+      "WoodPltName": "Daun",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P44",
+      "WoodPltUoM": "Kg",
+      "WoodPltVal": 10.00,
+      "WoodPltName": "Tanah",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P45",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 1000.00,
+      "WoodPltName": "Cat Minyak",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P46",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 1000.00,
+      "WoodPltName": "Hasil Olahan Saw Mill",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P49",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 500.00,
+      "WoodPltName": "Bercabang",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P50",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 500.00,
+      "WoodPltName": "Bengkok",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P53",
+      "WoodPltUoM": "Log",
+      "WoodPltVal": 300.00,
+      "WoodPltName": "Lapuk",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P57",
+      "WoodPltUoM": "Truk",
+      "WoodPltVal": 1000.00,
+      "WoodPltName": "P34 Wet Land",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P60",
+      "WoodPltUoM": "Kg",
+      "WoodPltVal": 10.00,
+      "WoodPltName": "Campuran Kulit Kayu dari P37 (ekstrim)",
+      "WoodPltGrp": "A"
+    },
+    {
+      "WoodPltID": "P62",
+      "WoodPltUoM": "Kg",
+      "WoodPltVal": 1000.00,
+      "WoodPltName": "Tanah (Kayu Kalimantan)",
+      "WoodPltGrp": "A"
+    }
+  ]
+}

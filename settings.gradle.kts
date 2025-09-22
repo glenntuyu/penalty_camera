@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "POCCamera"
+rootProject.name = "POCPenalty"
 include(":app")
  

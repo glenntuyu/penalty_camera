@@ -2,14 +2,15 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
-    namespace = "id.co.app.poccamera"
+    namespace = "id.co.app.pocpenalty"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "id.co.app.poccamera"
+        applicationId = "id.co.app.pocpenalty"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -50,6 +51,8 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.gson)
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.jetbrains.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
