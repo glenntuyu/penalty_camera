@@ -35,11 +35,9 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowCircleLeft
 import androidx.compose.material.icons.filled.Camera
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,7 +49,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarColors
@@ -151,13 +148,15 @@ fun GridTaggingScreenSMDD(
     val gridDots = remember { mutableStateListOf<GridDot>() }
     var selectedGrid by remember { mutableStateOf<GridRect?>(null) }
     var selectedTapOffset by remember { mutableStateOf<Offset?>(null) }
+    var selectedTagType by remember { mutableStateOf<TagType?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSheet by remember { mutableStateOf(false) }
     var cropRect by remember { mutableStateOf<Rect?>(null) }
 
     var screenState by remember { mutableStateOf(ScreenState2.CAPTURE) }
     val penaltyReport by remember { mutableStateOf(PenaltyReport()) }
-    val showWarn = remember { mutableStateOf(false) }
+    val showWarnMissingPenalty = remember { mutableStateOf(false) }
+    val showWarnDoubleInputPenalty = remember { mutableStateOf(false) }
     var isPureJsonData by remember { mutableStateOf(false) }
     var jsonFile by remember { mutableStateOf("") }
 
@@ -286,7 +285,7 @@ fun GridTaggingScreenSMDD(
                                         if (gridDots.isNotEmpty()) {
                                             screenState = ScreenState2.REPORT
                                         } else {
-                                            showWarn.value = true
+                                            showWarnMissingPenalty.value = true
                                         }
                                     },
                                     shape = Pill,
@@ -404,24 +403,43 @@ fun GridTaggingScreenSMDD(
                     onDismissRequest = { showSheet = false },
                     sheetState = sheetState
                 ) {
-                    AbnormalitySelector(options = list, onSelect = {
-                        gridDots.add(
-                            GridDot(
-                                selectedGrid!!,
-                                selectedTapOffset!!,
-                                it.tagType
+                    AbnormalitySelector(options = list, onSelect = {gridDot ->
+                        val filter = gridDots.filter { gridDot -> gridDot.grid==selectedGrid }
+                        var isDoubleInput=false
+                        filter.forEach {
+                            if (it.tagType == gridDot.tagType) {
+                                isDoubleInput = true
+                            }
+                        }
+                        if (!isDoubleInput){
+                            gridDots.add(
+                                GridDot(
+                                    selectedGrid!!,
+                                    selectedTapOffset!!,
+                                    gridDot.tagType
+                                )
                             )
-                        )
+                        } else {
+                            selectedTagType = gridDot.tagType
+                            showWarnDoubleInputPenalty.value = true
+                        }
                         showSheet = false
                     })
                 }
             }
         }
         MissingPenaltyDialog(
-            visible = showWarn.value,
+            visible = showWarnMissingPenalty.value,
             onDismiss = {
-                showWarn.value = false
+                showWarnMissingPenalty.value = false
             },
+        )
+        DoubleInputPenaltyDialog(
+            visible = showWarnDoubleInputPenalty.value,
+            onDismiss = {
+                showWarnDoubleInputPenalty.value = false
+            },
+            selectedTagType = selectedTagType
         )
     }
 }
@@ -466,6 +484,52 @@ fun MissingPenaltyDialog(
                 )
             ) {
                 Text("Isi Penalty")
+            }
+        },
+    )
+}
+
+@Composable
+fun DoubleInputPenaltyDialog(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    selectedTagType: TagType?,
+) {
+    if (!visible) return
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                painter = painterResource(id = R.drawable.warning),
+                contentDescription = "warning",
+                modifier = Modifier.size(48.dp),
+                tint = Color.Unspecified
+            )
+        },
+        title = {
+            Text(
+                "Penalty ${selectedTagType?.name} sudah ada",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Text(
+                "Silakan input penalty lain.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Teal,
+                    contentColor = Color.White
+                )
+            ) {
+                Text("OK")
             }
         },
     )
