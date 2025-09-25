@@ -616,7 +616,7 @@ fun PenaltyReportScreen(
                                 letterSpacing = 2.sp
                             )
                             Text(
-                                text = (summary.total.toInt() * 10).toString(),
+                                text = "${(summary.total.toInt() * 10).toString()} KG",
                                 color = Color.White,
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontWeight = FontWeight.ExtraBold
@@ -671,7 +671,8 @@ private fun SectionBlock(summary: PenaltySummary) {
     summary.lines.forEach {
         KeyValueRow(
             label = it.rule.name,
-            valueText = "${it.subtotal.toInt()} ${it.rule.uom} (${it.quantity.toInt()} titik X ${it.rule.unitValue.toInt()} ${it.rule.uom})"
+//            valueText = "${it.subtotal.toInt()} ${it.rule.uom} (${it.quantity.toInt()} titik X ${it.rule.unitValue.toInt()} ${it.rule.uom})"
+            valueText = "${it.subtotal.toInt()} KG(${it.quantity.toInt()} titik X ${it.rule.unitValue.toInt()} KG)"
         )
         Spacer(Modifier.height(8.dp))
     }
@@ -863,7 +864,9 @@ fun PillSwitch(
     ) {
         // Optional tiny labels
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -1266,8 +1269,10 @@ fun GridImage(
                 detectTapGestures { tap ->
                     drawParams?.let { p ->
                         // canvas → image coordinates
-                        val x = ((tap.x - p.left) / p.scale).coerceIn(0f, imageBitmap.width.toFloat())
-                        val y = ((tap.y - p.top) / p.scale).coerceIn(0f, imageBitmap.height.toFloat())
+                        val x =
+                            ((tap.x - p.left) / p.scale).coerceIn(0f, imageBitmap.width.toFloat())
+                        val y =
+                            ((tap.y - p.top) / p.scale).coerceIn(0f, imageBitmap.height.toFloat())
 
                         val grid = if (isPureJsonData) {
                             if (cropRect == null)
