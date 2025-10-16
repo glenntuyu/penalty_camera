@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">POCPenalty</string>
+    <string name="label_not_connected_detail">Pastikan anda terhubung ke jaringan atau tunnel anda connected!</string>
 </resources>

@@ -1,14 +1,27 @@
 package id.co.app.pocpenalty
 
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaScannerConnection
+import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Log
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import id.co.app.pocpenalty.data.PenaltyEntry
 import id.co.app.pocpenalty.data.PenaltyLineResult
 import id.co.app.pocpenalty.data.PenaltyRule
 import id.co.app.pocpenalty.data.PenaltySummary
 import id.co.app.pocpenalty.data.Uom
+import java.io.File
+import java.io.FileOutputStream
 import java.util.Locale
+import androidx.core.net.toUri
 
 /**
  * Created by Tuyu on 6/19/2025.
@@ -109,4 +122,82 @@ fun computePenalties(
         PenaltyLineResult(rule, e.quantity, subtotal)
     }
     return PenaltySummary(lines)
+}
+
+enum class ImgFormat { JPEG, WEBP }
+
+fun saveImageBitmapToFile(
+    context: Context,
+    image: Bitmap,
+    fileName: String = "penalty_image_${System.currentTimeMillis()}",
+    format: ImgFormat = ImgFormat.JPEG,
+    quality: Int = 92
+): File {
+    val ext = when (format) { ImgFormat.JPEG -> "jpg"; ImgFormat.WEBP -> "webp" }
+    val outFile = File(context.cacheDir, "$fileName.$ext")
+    FileOutputStream(outFile).use { out ->
+        val bmp = image
+        val compressFormat = when (format) {
+            ImgFormat.JPEG -> Bitmap.CompressFormat.JPEG
+            ImgFormat.WEBP -> Bitmap.CompressFormat.WEBP
+        }
+        bmp.compress(compressFormat, quality.coerceIn(0, 100), out)
+        out.flush()
+    }
+    return outFile
+}
+
+fun refreshGallery(context: Context) {
+    val root = File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+        "Camera"
+    )
+
+    if (!root.exists() || !root.isDirectory) return
+
+    val imagePaths = root.walkTopDown()
+        .filter { it.isFile && (it.extension.equals("jpg", true) || it.extension.equals("png", true) || it.extension.equals("webp", true)) }
+        .map { it.absolutePath }
+        .toList()
+
+    if (imagePaths.isNotEmpty()) {
+        MediaScannerConnection.scanFile(
+            context,
+            imagePaths.toTypedArray(),
+            null
+        ) { path, uri ->
+            Log.d("MediaScanner", "Scanned file: $path -> $uri")
+        }
+    }
+}
+
+fun scanFolderWithContentResolver(context: Context, folder: File) {
+    if (!folder.exists() || !folder.isDirectory) return
+
+    val files = folder.listFiles() ?: return
+    val resolver = context.contentResolver
+
+    for (file in files) {
+        if (file.isFile) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DATA, file.absolutePath)  // deprecated in API 29+, but still works for direct rescan
+                put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                put(MediaStore.MediaColumns.MIME_TYPE, getMimeType(file))
+                put(MediaStore.MediaColumns.SIZE, file.length())
+            }
+
+            // Try insert; if already exists, it will fail silently
+            resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        }
+    }
+}
+
+// Helper: determine MIME type from extension
+private fun getMimeType(file: File): String {
+    return when (file.extension.lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        else -> "application/octet-stream"
+    }
 }

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.ContextCompat
 import id.co.app.pocpenalty.ScalingInfo
@@ -111,6 +112,35 @@ fun Context.createSafeImageBitmapWithScaling(drawableRes: Int): Pair<ImageBitmap
         }
     } else {
         sampledBitmap
+    }
+
+    val scalingInfo = ScalingInfo(scaleX, scaleY, originalWidth, originalHeight)
+    return Pair(finalBitmap.asImageBitmap(), scalingInfo)
+}
+
+fun Context.createSafeImageBitmapWithScaling(bitmap: Bitmap): Pair<ImageBitmap, ScalingInfo> {
+    val displayMetrics = resources.displayMetrics
+    val screenWidthPixels = displayMetrics.widthPixels
+
+    // Convert to Android Bitmap to work with dimensions and resizing
+    val originalBitmap: Bitmap = bitmap
+
+    val originalWidth = originalBitmap.width
+    val originalHeight = originalBitmap.height
+
+    // Calculate scaled dimensions
+    val aspectRatio = originalHeight.toFloat() / originalWidth.toFloat()
+    val scaledHeight = (screenWidthPixels * aspectRatio).toInt()
+
+    // Calculate scaling factors
+    val scaleX = screenWidthPixels.toFloat() / originalWidth.toFloat()
+    val scaleY = scaledHeight.toFloat() / originalHeight.toFloat()
+
+    // Create the scaled bitmap
+    val finalBitmap = if (originalWidth != screenWidthPixels) {
+        Bitmap.createScaledBitmap(originalBitmap, screenWidthPixels, scaledHeight, true)
+    } else {
+        originalBitmap
     }
 
     val scalingInfo = ScalingInfo(scaleX, scaleY, originalWidth, originalHeight)

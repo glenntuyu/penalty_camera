@@ -3,8 +3,13 @@
 package id.co.app.pocpenalty
 
 import android.graphics.Bitmap
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -21,7 +26,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,12 +39,14 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowCircleLeft
 import androidx.compose.material.icons.filled.Camera
+import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +60,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarColors
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -80,15 +87,13 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.scale
+import androidx.lifecycle.viewmodel.compose.viewModel
 import createSafeImageBitmapWithScaling
 import id.co.app.pocpenalty.data.AbnormalityOption
 import id.co.app.pocpenalty.data.GridDot
@@ -99,10 +104,10 @@ import id.co.app.pocpenalty.data.PenaltyRule
 import id.co.app.pocpenalty.data.PenaltySummary
 import id.co.app.pocpenalty.data.TagType
 import id.co.app.pocpenalty.data.WoodPileData
-import id.co.app.pocpenalty.data.WoodPileDataConverter
 import id.co.app.pocpenalty.data.decodePenaltyRules
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.random.Random
 
 /**
  * Created by Tuyu on 7/8/2025.
@@ -140,8 +145,11 @@ val CardCorner = RoundedCornerShape(24.dp)
 
 @Composable
 fun GridTaggingScreenSMDD(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: PenaltyViewModel = viewModel()
 ) {
+    val state by viewModel.processState.collectAsState()
+
     var woodPileData by remember { mutableStateOf<WoodPileData?>(null) }
     var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var scalingInfo by remember { mutableStateOf<ScalingInfo?>(null) }
@@ -157,15 +165,14 @@ fun GridTaggingScreenSMDD(
     val penaltyReport by remember { mutableStateOf(PenaltyReport()) }
     val showWarnMissingPenalty = remember { mutableStateOf(false) }
     val showWarnDoubleInputPenalty = remember { mutableStateOf(false) }
-    var isPureJsonData by remember { mutableStateOf(false) }
-    var jsonFile by remember { mutableStateOf("") }
+    var jsonFile by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        if (screenState == ScreenState2.REPORT) penaltyReport.title else if (screenState != ScreenState2.CAPTURE) jsonFile else "Penalty",
+                        if (screenState == ScreenState2.REPORT) penaltyReport.title else if (screenState != ScreenState2.CAPTURE) jsonFile?:"Penalty" else "Penalty",
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
                         color = Black,
                     )
@@ -212,16 +219,38 @@ fun GridTaggingScreenSMDD(
             contentAlignment = Alignment.Center,
         ) {
             when (screenState) {
-                ScreenState2.CAPTURE -> CaptureImage(
-                    onCameraClick = { _woodPileData, _imageBitmap, _scalingInfo, _jsonFile, _isPureJsonData ->
-                        jsonFile = _jsonFile
-                        woodPileData = _woodPileData
-                        imageBitmap = _imageBitmap
-                        scalingInfo = _scalingInfo
-                        isPureJsonData = _isPureJsonData
-                        screenState = ScreenState2.GRID
+                ScreenState2.CAPTURE ->
+                    when (state) {
+                        is Result.Done -> TODO()
+                        Result.Empty -> CaptureImage()
+                        is Result.Failure -> {
+                            val msg = (state as Result.Failure).message
+                            Text(
+                                text = "Error: $msg",
+                                color = Color.Red,
+                            )
+                        }
+
+                        is Result.FailureNetwork -> {
+                            val msg = (state as Result.FailureNetwork).message
+                            Text(
+                                text = "Network error: $msg",
+                                color = Color.Red,
+                            )
+                        }
+
+                        is Result.Failures<*> -> TODO()
+                        Result.Loading -> FullScreenLoading()
+                        is Result.Success<*> -> {
+                            woodPileData = (state as Result.Success<WoodPileData>).value
+                            imageBitmap = (state as Result.Success<WoodPileData>).imageBitmap
+                            scalingInfo = (state as Result.Success<WoodPileData>).scalingInfo
+                            jsonFile = (state as Result.Success<WoodPileData>).jsonFile
+                            screenState = ScreenState2.GRID
+                            viewModel.capture()
+                            gridDots.clear()
+                        }
                     }
-                )
 
                 ScreenState2.GRID -> Column(
                     modifier = Modifier.fillMaxSize(),
@@ -237,8 +266,7 @@ fun GridTaggingScreenSMDD(
                             selectedGrid = it
                             screenState = ScreenState2.ZOOM
                         },
-                        cropRect = cropRect,
-                        isPureJsonData = isPureJsonData
+                        cropRect = cropRect
                     )
 
                     Box(
@@ -403,15 +431,15 @@ fun GridTaggingScreenSMDD(
                     onDismissRequest = { showSheet = false },
                     sheetState = sheetState
                 ) {
-                    AbnormalitySelector(options = list, onSelect = {gridDot ->
-                        val filter = gridDots.filter { gridDot -> gridDot.grid==selectedGrid }
-                        var isDoubleInput=false
+                    AbnormalitySelector(options = list, onSelect = { gridDot ->
+                        val filter = gridDots.filter { gridDot -> gridDot.grid == selectedGrid }
+                        var isDoubleInput = false
                         filter.forEach {
                             if (it.tagType == gridDot.tagType) {
                                 isDoubleInput = true
                             }
                         }
-                        if (!isDoubleInput){
+                        if (!isDoubleInput) {
                             gridDots.add(
                                 GridDot(
                                     selectedGrid!!,
@@ -787,41 +815,70 @@ data class LinkedItem(
 )
 
 @Composable
-fun CaptureImage(onCameraClick: (woodPileData: WoodPileData, imageBitmap: ImageBitmap, scalingInfo: ScalingInfo, jsonFile: String, isPureJsonData: Boolean) -> Unit) {
+fun CaptureImage(
+    viewModel: PenaltyViewModel = viewModel(),
+) {
     val context = LocalContext.current
-    val item = listOf(
-        LinkedItem("woodpile145.json", R.drawable.woodpile145),
-        LinkedItem("woodpile146.json", R.drawable.woodpile146),
-        LinkedItem("woodpile148.json", R.drawable.woodpile148),
-        LinkedItem("woodpile149.json", R.drawable.woodpile149),
-        LinkedItem("woodpile151.json", R.drawable.woodpile151),
-        LinkedItem("woodpile152.json", R.drawable.woodpile152),
-        LinkedItem("woodpile154.json", R.drawable.woodpile154),
-        LinkedItem("woodpile155.json", R.drawable.woodpile155),
-        LinkedItem("woodpile157.json", R.drawable.woodpile157),
-        LinkedItem("woodpile158.json", R.drawable.woodpile158),
-        LinkedItem("woodpile160.json", R.drawable.woodpile160),
-        LinkedItem("woodpile179.json", R.drawable.woodpile179),
-        LinkedItem("woodpile182.json", R.drawable.woodpile182),
-        LinkedItem("woodpile183.json", R.drawable.woodpile183),
-        LinkedItem("woodpile184.json", R.drawable.woodpile184),
-        LinkedItem("woodpile185.json", R.drawable.woodpile185),
-        LinkedItem("woodpile186.json", R.drawable.woodpile186),
-        LinkedItem("woodpile188.json", R.drawable.woodpile188),
-        LinkedItem("woodpile189.json", R.drawable.woodpile189),
-    )
 
-    val random = item[16]
-    val woodPileData = WoodPileDataConverter.fromJsonFile(context, random.jsonPath)
-    val (imageBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(random.drawableRes)
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    var checked by remember { mutableStateOf(false) }
-
+    // Launcher for picking content from gallery
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        selectedImageUri = uri
+        uri?.let {
+            selectedBitmap = if (Build.VERSION.SDK_INT < 28) {
+                MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+            } else {
+                val source = ImageDecoder.createSource(context.contentResolver, it)
+                ImageDecoder.decodeBitmap(source)
+            }
+        }
+    }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        refreshGallery(context)
         IconButton(
-            onClick = { onCameraClick(woodPileData, imageBitmap, scalingInfo, random.jsonPath, checked) },
+            onClick = {
+                val item = listOf(
+                    LinkedItem("woodpile145.json", R.drawable.woodpile145),
+                    LinkedItem("woodpile146.json", R.drawable.woodpile146),
+                    LinkedItem("woodpile148.json", R.drawable.woodpile148),
+                    LinkedItem("woodpile149.json", R.drawable.woodpile149),
+                    LinkedItem("woodpile151.json", R.drawable.woodpile151),
+                    LinkedItem("woodpile152.json", R.drawable.woodpile152),
+                    LinkedItem("woodpile154.json", R.drawable.woodpile154),
+                    LinkedItem("woodpile155.json", R.drawable.woodpile155),
+                    LinkedItem("woodpile157.json", R.drawable.woodpile157),
+                    LinkedItem("woodpile158.json", R.drawable.woodpile158),
+                    LinkedItem("woodpile160.json", R.drawable.woodpile160),
+                    LinkedItem("woodpile179.json", R.drawable.woodpile179),
+                    LinkedItem("woodpile182.json", R.drawable.woodpile182),
+                    LinkedItem("woodpile183.json", R.drawable.woodpile183),
+                    LinkedItem("woodpile184.json", R.drawable.woodpile184),
+                    LinkedItem("woodpile185.json", R.drawable.woodpile185),
+                    LinkedItem("woodpile186.json", R.drawable.woodpile186),
+                    LinkedItem("woodpile188.json", R.drawable.woodpile188),
+                    LinkedItem("woodpile189.json", R.drawable.woodpile189),
+                )
+
+                val random = item[Random.nextInt(0, item.size)]
+//                    val woodPileData = WoodPileDataConverter.fromJsonFile(context, random.jsonPath)
+                val (imageBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(random.drawableRes)
+                val options = BitmapFactory.Options().apply {
+                    inScaled = false
+                }
+                val bitmap = BitmapFactory.decodeResource(context.resources, random.drawableRes, options)
+                viewModel.onProcessImage(
+                    selectedBitmap = bitmap,
+                    imageBitmap = imageBitmap,
+                    scalingInfo = scalingInfo,
+                    jsonFile = random.jsonPath
+                )
+            },
             modifier = Modifier.size(112.dp)
         ) {
             Icon(
@@ -834,55 +891,35 @@ fun CaptureImage(onCameraClick: (woodPileData: WoodPileData, imageBitmap: ImageB
             "Capture Image",
             style = MaterialTheme.typography.titleLarge
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Read JSON data")
-            PillSwitch(checked = checked, onCheckedChange = { checked = it })
+        selectedBitmap?.let { bitmap ->
+            val (imageBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(bitmap)
+            viewModel.onProcessImage(
+                selectedBitmap = bitmap,
+                imageBitmap = imageBitmap,
+                scalingInfo = scalingInfo,
+                jsonFile = null
+            )
         }
-    }
-}
-
-@Composable
-fun PillSwitch(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    onLabel: String = "ON",
-    offLabel: String = "OFF"
-) {
-    val bg by animateColorAsState(if (checked) Teal else Color(0xFFE0E0E0), label = "bg")
-    val knobX by animateDpAsState(if (checked) 36.dp else 2.dp, label = "knob")
-
-    Box(
-        modifier = modifier
-            .width(64.dp)
-            .height(36.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(bg)
-            .semantics(mergeDescendants = true) { this.role = Role.Switch }
-            .clickable { onCheckedChange(!checked) },
-        contentAlignment = Alignment.CenterStart
-    ) {
-        // Optional tiny labels
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        IconButton(
+            onClick = {
+                launcher.launch("image/*")
+            },
+            modifier = Modifier.size(112.dp)
         ) {
-            Text(onLabel, color = Color.White.copy(alpha = if (checked) 1f else 0f), style = MaterialTheme.typography.labelMedium)
-            Text(offLabel, color = Color.Black.copy(alpha = if (checked) 0f else 0.6f), style = MaterialTheme.typography.labelMedium)
+            Icon(
+                Icons.Default.ImageSearch,
+                contentDescription = "ImageSearch",
+                modifier = Modifier.size(56.dp)
+            )
         }
-        // Knob
-        Box(
-            modifier = Modifier
-                .offset(x = knobX)
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(Color.White)
+        Text(
+            "Pick Image",
+            style = MaterialTheme.typography.titleLarge
         )
     }
+
 }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AbnormalityLegend(
@@ -1257,15 +1294,14 @@ fun GridImage(
     scalingInfo: ScalingInfo,
     gridDots: SnapshotStateList<GridDot>,
     onClickGrid: (gridRect: GridRect?) -> Unit,
-    cropRect: Rect? = null,
-    isPureJsonData: Boolean = false
+    cropRect: Rect? = null
 ) {
     var drawParams by remember { mutableStateOf<ImageDrawParams?>(null) }
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .pointerInput(isPureJsonData, imageBitmap, woodPileData, scalingInfo, cropRect) {
+            .pointerInput(imageBitmap, woodPileData, scalingInfo, cropRect) {
                 detectTapGestures { tap ->
                     drawParams?.let { p ->
                         // canvas → image coordinates
@@ -1274,14 +1310,7 @@ fun GridImage(
                         val y =
                             ((tap.y - p.top) / p.scale).coerceIn(0f, imageBitmap.height.toFloat())
 
-                        val grid = if (isPureJsonData) {
-                            if (cropRect == null)
-                                findGridFromBoxLayout(Offset(x, y), woodPileData, scalingInfo)
-                            else
-                                findGridInNewCropArea(Offset(x, y), cropRect, woodPileData)
-                        } else {
-                            findGridFromData(Offset(x, y), woodPileData, scalingInfo)
-                        }
+                        val grid = findGridFromData(Offset(x, y), woodPileData, scalingInfo)
                         onClickGrid(grid)
                     }
                 }
@@ -1318,78 +1347,44 @@ fun GridImage(
             val rectW = bottomRight.x - topLeft.x
             val rectH = bottomRight.y - topLeft.y
 
-            if (isPureJsonData) {
-                // draw grid by counts inside detection/crop rect
-                val vCount = woodPileData.gridLines.vertical.size
-                val hCount = woodPileData.gridLines.horizontal.size
-
-                val cellW = (cropRect?.width ?: rectW) / vCount
-                val cellH = (cropRect?.height ?: rectH) / hCount
-
-                // vertical lines
-                for (i in 1 until vCount) {
-                    val x = (cropRect?.left ?: topLeft.x) + i * cellW
-                    drawLine(
-                        color = Color.Yellow,
-                        start = Offset(x, cropRect?.top ?: topLeft.y),
-                        end = Offset(x, cropRect?.bottom ?: bottomRight.y),
-                        strokeWidth = stroke
-                    )
-                }
-                // horizontal lines
-                for (j in 1 until hCount) {
-                    val y = (cropRect?.top ?: topLeft.y) + j * cellH
-                    drawLine(
-                        color = Color.Yellow,
-                        start = Offset(cropRect?.left ?: topLeft.x, y),
-                        end = Offset(cropRect?.right ?: bottomRight.x, y),
-                        strokeWidth = stroke
-                    )
-                }
-
-                // detection/crop outline (green)
-                val tl = cropRect?.let { Offset(it.left, it.top) } ?: topLeft
-                val sz = cropRect?.let { Size(it.width, it.height) } ?: Size(rectW, rectH)
-                drawRect(color = Color.Green, topLeft = tl, size = sz, style = Stroke(width = stroke * 2))
-            } else {
-                // draw provided grid lines (yellow)
-                woodPileData.gridLines.vertical.forEach { line ->
-                    drawLine(
-                        color = Color.Yellow,
-                        start = Offset(
-                            line.p1[0].toFloat() * scalingInfo.scaleX,
-                            line.p1[1].toFloat() * scalingInfo.scaleY
-                        ),
-                        end = Offset(
-                            line.p2[0].toFloat() * scalingInfo.scaleX,
-                            line.p2[1].toFloat() * scalingInfo.scaleY
-                        ),
-                        strokeWidth = stroke
-                    )
-                }
-                woodPileData.gridLines.horizontal.forEach { line ->
-                    drawLine(
-                        color = Color.Yellow,
-                        start = Offset(
-                            line.p1[0].toFloat() * scalingInfo.scaleX,
-                            line.p1[1].toFloat() * scalingInfo.scaleY
-                        ),
-                        end = Offset(
-                            line.p2[0].toFloat() * scalingInfo.scaleX,
-                            line.p2[1].toFloat() * scalingInfo.scaleY
-                        ),
-                        strokeWidth = stroke
-                    )
-                }
-
-                // detection outline (red)
-                drawRect(
-                    color = Color.Red,
-                    topLeft = topLeft,
-                    size = Size(rectW, rectH),
-                    style = Stroke(width = stroke * 2)
+            // draw provided grid lines (yellow)
+            woodPileData.gridLines.vertical.forEach { line ->
+                drawLine(
+                    color = Color.Yellow,
+                    start = Offset(
+                        line.p1[0].toFloat() * scalingInfo.scaleX,
+                        line.p1[1].toFloat() * scalingInfo.scaleY
+                    ),
+                    end = Offset(
+                        line.p2[0].toFloat() * scalingInfo.scaleX,
+                        line.p2[1].toFloat() * scalingInfo.scaleY
+                    ),
+                    strokeWidth = stroke
                 )
             }
+            woodPileData.gridLines.horizontal.forEach { line ->
+                drawLine(
+                    color = Color.Yellow,
+                    start = Offset(
+                        line.p1[0].toFloat() * scalingInfo.scaleX,
+                        line.p1[1].toFloat() * scalingInfo.scaleY
+                    ),
+                    end = Offset(
+                        line.p2[0].toFloat() * scalingInfo.scaleX,
+                        line.p2[1].toFloat() * scalingInfo.scaleY
+                    ),
+                    strokeWidth = stroke
+                )
+            }
+
+            // detection outline (red)
+            drawRect(
+                color = Color.Red,
+                topLeft = topLeft,
+                size = Size(rectW, rectH),
+                style = Stroke(width = stroke * 2)
+            )
+
 
             // dots (common)
             gridDots.forEach { dot ->
@@ -1798,4 +1793,20 @@ private fun findGridFromBoxLayout(
         col = col,
         rect = Rect(cellTopLeft, cellBottomRight)
     )
+}
+
+@Composable
+fun FullScreenLoading() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.3f)),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            color = Color.White,
+            strokeWidth = 4.dp,
+            modifier = Modifier.size(64.dp)
+        )
+    }
 }

@@ -1,8 +1,9 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.kapt)   // keep kapt for Hilt
+    alias(libs.plugins.ksp)           // use KSP for Moshi codegen
+    alias(libs.plugins.hilt)
 }
 
 android {
@@ -29,36 +30,51 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
     }
+    composeOptions {
+        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
+    }
 }
 
 dependencies {
-
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
+    // Compose
     implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
+    implementation(libs.bundles.compose)
     implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.ui)
     implementation(libs.androidx.material3)
-    implementation(libs.gson)
-    implementation(libs.androidx.material.icons.extended)
-    implementation(libs.jetbrains.kotlinx.serialization.json)
-
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
+    implementation("androidx.compose.material:material-icons-extended")
+
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation("androidx.hilt:hilt-navigation-compose:${libs.versions.hiltNavigationCompose.get()}")
+
+    // Coroutines
+    implementation(libs.bundles.coroutines)
+
+    // Networking
+    implementation(libs.bundles.retrofit)
+
+    // JSON (pick one or both)
+    implementation(libs.gson)                 // if you still use Gson somewhere
+    implementation(libs.multidex)                 // if you still use Gson somewhere
+    implementation(libs.moshi.kotlin)         // Moshi runtime
+    ksp(libs.moshi.codegen)                   // Moshi codegen via KSP (NOT kapt)
+
+    // Hilt
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+}
+
+kapt {
+    correctErrorTypes = true
 }

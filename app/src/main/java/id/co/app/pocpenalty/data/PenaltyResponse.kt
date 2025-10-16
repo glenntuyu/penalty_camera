@@ -1,29 +1,24 @@
 package id.co.app.pocpenalty.data
 
-import com.google.gson.Gson
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
+import com.squareup.moshi.Moshi
 
-@Serializable
+@JsonClass(generateAdapter = true)
 data class PenaltyApiResponse(
-    val statusCode: Int,
-    val statusDesc: String,
-    val message: String,
-    val data: List<PenaltyRuleDto>
+    @Json(name = "statusCode") val statusCode: Int,
+    @Json(name = "statusDesc") val statusDesc: String,
+    @Json(name = "message") val message: String,
+    @Json(name = "data") val data: List<PenaltyRuleDto>
 )
 
-@Serializable
+@JsonClass(generateAdapter = true)
 data class PenaltyRuleDto(
-    @SerialName("WoodPltID")  val id: String,
-    @SerialName("WoodPltUoM") val uom: String,
-    @SerialName("WoodPltVal") val value: Double,
-    @SerialName("WoodPltName") val name: String,
-    @SerialName("WoodPltGrp") val group: String
+    @Json(name = "WoodPltID") val id: String,
+    @Json(name = "WoodPltUoM") val uom: String,
+    @Json(name = "WoodPltVal") val value: Double,
+    @Json(name = "WoodPltName") val name: String,
+    @Json(name = "WoodPltGrp") val group: String
 )
 
 enum class Uom { TRUK, PERSEN, LOG, PCS, KG, UNKNOWN }
@@ -53,7 +48,13 @@ private fun String.toGroup(): Group = when (trim().uppercase()) {
 }
 
 fun PenaltyRuleDto.toDomain(): PenaltyRule =
-    PenaltyRule(id = id, name = name, group = group.toGroup(), uom = uom.toUom(), unitValue = value)
+    PenaltyRule(
+        id = id,
+        name = name,
+        group = group.toGroup(),
+        uom = uom.toUom(),
+        unitValue = value
+    )
 
 fun PenaltyRule.toDto(): PenaltyRuleDto =
     PenaltyRuleDto(
@@ -68,7 +69,11 @@ fun PenaltyRule.toDto(): PenaltyRuleDto =
         },
         value = unitValue,
         name = name,
-        group = when (group) { Group.A -> "A"; Group.B -> "B"; Group.UNKNOWN -> "N/A" }
+        group = when (group) {
+            Group.A -> "A"
+            Group.B -> "B"
+            Group.UNKNOWN -> "N/A"
+        }
     )
 
 data class PenaltyEntry(
@@ -90,9 +95,12 @@ data class PenaltySummary(
         lines.groupBy { it.rule.group }.mapValues { (_, rows) -> rows.sumOf { it.subtotal } }
 }
 
-private val json = Json {
-    ignoreUnknownKeys = true
-    prettyPrint = true
+/**
+ * Decode JSON text into a list of [PenaltyRule] using Moshi.
+ */
+fun decodePenaltyRules(jsonText: String): List<PenaltyRule> {
+    val moshi = Moshi.Builder().build()
+    val adapter = moshi.adapter(PenaltyApiResponse::class.java)
+    val parsed = adapter.fromJson(jsonText) ?: return emptyList()
+    return parsed.data.map { it.toDomain() }
 }
-fun decodePenaltyRules(jsonText: String): List<PenaltyRule> =
-    json.decodeFromString(PenaltyApiResponse.serializer(),jsonText).data.map { it.toDomain() }

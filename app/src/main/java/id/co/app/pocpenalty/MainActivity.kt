@@ -16,10 +16,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
-import createSafeImageBitmapWithScaling
+import dagger.hilt.android.AndroidEntryPoint
 import id.co.app.pocpenalty.data.WoodPileDataConverter
 import id.co.app.pocpenalty.ui.theme.POCPenaltyTheme
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,8 +41,8 @@ class MainActivity : ComponentActivity() {
 fun Camera(modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
-    val woodPileData = WoodPileDataConverter.fromJsonFile(context, "woodpile145.json")
-    val (imageBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(R.drawable.woodpile145)
+//    val woodPileData = WoodPileDataConverter.fromJsonFile(context, "woodpile145.json")
+//    val (imageBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(R.drawable.woodpile145)
 //    GridTaggingScreen(
 //        imageBitmap = imageBitmap,
 //        woodPileData = woodPileData,
