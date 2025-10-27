@@ -2,12 +2,15 @@
 
 package id.co.app.pocpenalty
 
+import android.content.ContentValues
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -105,6 +108,8 @@ import id.co.app.pocpenalty.data.PenaltySummary
 import id.co.app.pocpenalty.data.TagType
 import id.co.app.pocpenalty.data.WoodPileData
 import id.co.app.pocpenalty.data.decodePenaltyRules
+import java.text.SimpleDateFormat
+import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.random.Random
@@ -166,13 +171,16 @@ fun GridTaggingScreenSMDD(
     val showWarnMissingPenalty = remember { mutableStateOf(false) }
     val showWarnDoubleInputPenalty = remember { mutableStateOf(false) }
     var jsonFile by remember { mutableStateOf<String?>(null) }
+    var showNoDetectionDialog by remember { mutableStateOf(false) }
+
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        if (screenState == ScreenState2.REPORT) penaltyReport.title else if (screenState != ScreenState2.CAPTURE) jsonFile?:"Penalty" else "Penalty",
+                        if (screenState == ScreenState2.REPORT) penaltyReport.title else if (screenState != ScreenState2.CAPTURE) jsonFile
+                            ?: "Penalty" else "Penalty",
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
                         color = Black,
                     )
@@ -242,13 +250,24 @@ fun GridTaggingScreenSMDD(
                         is Result.Failures<*> -> TODO()
                         Result.Loading -> FullScreenLoading()
                         is Result.Success<*> -> {
-                            woodPileData = (state as Result.Success<WoodPileData>).value
-                            imageBitmap = (state as Result.Success<WoodPileData>).imageBitmap
-                            scalingInfo = (state as Result.Success<WoodPileData>).scalingInfo
-                            jsonFile = (state as Result.Success<WoodPileData>).jsonFile
-                            screenState = ScreenState2.GRID
+
+                            val result = state as Result.Success<WoodPileData>
+                            woodPileData = result.value
+                            imageBitmap = result.imageBitmap
+                            scalingInfo = result.scalingInfo
+                            jsonFile = result.jsonFile
+
+                            // 👇 Check for detection
+                            val hasDetection =
+                                woodPileData?.detectionBox != null && woodPileData?.gridLines != null
+
                             viewModel.capture()
-                            gridDots.clear()
+                            if (!hasDetection) {
+                                showNoDetectionDialog = true
+                            } else {
+                                screenState = ScreenState2.GRID
+                                gridDots.clear()
+                            }
                         }
                     }
 
@@ -286,26 +305,26 @@ fun GridTaggingScreenSMDD(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Left: white pill – "Retake"
-                                OutlinedButton(
-                                    onClick = { screenState = ScreenState2.CROP },
-                                    shape = Pill,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = Color.White,
-                                        contentColor = Teal
-                                    ),
-                                    border = BorderStroke(1.dp, SolidColor(Teal))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Refresh,
-                                        contentDescription = "Recrop",
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Retake", fontWeight = FontWeight.Medium)
-                                }
+//                                OutlinedButton(
+//                                    onClick = { screenState = ScreenState2.CROP },
+//                                    shape = Pill,
+//                                    modifier = Modifier
+//                                        .weight(1f)
+//                                        .height(48.dp),
+//                                    colors = ButtonDefaults.outlinedButtonColors(
+//                                        containerColor = Color.White,
+//                                        contentColor = Teal
+//                                    ),
+//                                    border = BorderStroke(1.dp, SolidColor(Teal))
+//                                ) {
+//                                    Icon(
+//                                        imageVector = Icons.Filled.Refresh,
+//                                        contentDescription = "Recrop",
+//                                        modifier = Modifier.size(24.dp)
+//                                    )
+//                                    Spacer(Modifier.width(8.dp))
+//                                    Text("Retake", fontWeight = FontWeight.Medium)
+//                                }
 
                                 // Right: teal pill – "Lihat Laporan"
                                 Button(
@@ -469,7 +488,58 @@ fun GridTaggingScreenSMDD(
             },
             selectedTagType = selectedTagType
         )
+        NoDetectionDialog(
+            visible = showNoDetectionDialog,
+            onDismiss = {
+                showNoDetectionDialog = false
+                screenState = ScreenState2.CAPTURE
+            }
+        )
     }
+}
+
+@Composable
+fun NoDetectionDialog(
+    visible: Boolean,
+    onDismiss: () -> Unit
+) {
+    if (!visible) return
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                painter = painterResource(id = R.drawable.warning),
+                contentDescription = "warning",
+                modifier = Modifier.size(48.dp),
+                tint = Color.Unspecified
+            )
+        },
+        title = {
+            Text(
+                text = "Tidak Ada Deteksi",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Text(
+                text = "Tidak ditemukan area deteksi atau grid pada gambar. " +
+                        "Silakan ambil foto yang lebih jelas atau ulangi proses pemindaian.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Teal,
+                    contentColor = Color.White
+                )
+            ) {
+                Text("OK")
+            }
+        }
+    )
 }
 
 @Composable
@@ -837,47 +907,96 @@ fun CaptureImage(
             }
         }
     }
+
+
+    // Camera capture
+    var currentPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            currentPhotoUri?.let { uri ->
+                decodeBitmapFromUri(context, uri)?.let { bmp ->
+                    val (imgBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(bmp)
+                    viewModel.onProcessImage(
+                        selectedBitmap = bmp,
+                        imageBitmap = imgBitmap,
+                        scalingInfo = scalingInfo,
+                        jsonFile = null
+                    )
+                }
+            }
+        }
+    }
+
+    // ==== CAMERA PERMISSION ====
+    var showCameraDeniedDialog by remember { mutableStateOf(false) }
+    val requestCameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            // Permission now granted – proceed to create the Uri and launch camera
+            val uri = createImageUri(context)
+            if (uri != null) {
+                currentPhotoUri = uri
+                takePictureLauncher.launch(uri)
+            }
+        } else {
+            showCameraDeniedDialog = true
+        }
+    }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         refreshGallery(context)
         IconButton(
             onClick = {
-                val item = listOf(
-                    LinkedItem("woodpile145.json", R.drawable.woodpile145),
-                    LinkedItem("woodpile146.json", R.drawable.woodpile146),
-                    LinkedItem("woodpile148.json", R.drawable.woodpile148),
-                    LinkedItem("woodpile149.json", R.drawable.woodpile149),
-                    LinkedItem("woodpile151.json", R.drawable.woodpile151),
-                    LinkedItem("woodpile152.json", R.drawable.woodpile152),
-                    LinkedItem("woodpile154.json", R.drawable.woodpile154),
-                    LinkedItem("woodpile155.json", R.drawable.woodpile155),
-                    LinkedItem("woodpile157.json", R.drawable.woodpile157),
-                    LinkedItem("woodpile158.json", R.drawable.woodpile158),
-                    LinkedItem("woodpile160.json", R.drawable.woodpile160),
-                    LinkedItem("woodpile179.json", R.drawable.woodpile179),
-                    LinkedItem("woodpile182.json", R.drawable.woodpile182),
-                    LinkedItem("woodpile183.json", R.drawable.woodpile183),
-                    LinkedItem("woodpile184.json", R.drawable.woodpile184),
-                    LinkedItem("woodpile185.json", R.drawable.woodpile185),
-                    LinkedItem("woodpile186.json", R.drawable.woodpile186),
-                    LinkedItem("woodpile188.json", R.drawable.woodpile188),
-                    LinkedItem("woodpile189.json", R.drawable.woodpile189),
-                )
-
-                val random = item[Random.nextInt(0, item.size)]
+//                val item = listOf(
+//                    LinkedItem("woodpile145.json", R.drawable.woodpile145),
+//                    LinkedItem("woodpile146.json", R.drawable.woodpile146),
+//                    LinkedItem("woodpile148.json", R.drawable.woodpile148),
+//                    LinkedItem("woodpile149.json", R.drawable.woodpile149),
+//                    LinkedItem("woodpile151.json", R.drawable.woodpile151),
+//                    LinkedItem("woodpile152.json", R.drawable.woodpile152),
+//                    LinkedItem("woodpile154.json", R.drawable.woodpile154),
+//                    LinkedItem("woodpile155.json", R.drawable.woodpile155),
+//                    LinkedItem("woodpile157.json", R.drawable.woodpile157),
+//                    LinkedItem("woodpile158.json", R.drawable.woodpile158),
+//                    LinkedItem("woodpile160.json", R.drawable.woodpile160),
+//                    LinkedItem("woodpile179.json", R.drawable.woodpile179),
+//                    LinkedItem("woodpile182.json", R.drawable.woodpile182),
+//                    LinkedItem("woodpile183.json", R.drawable.woodpile183),
+//                    LinkedItem("woodpile184.json", R.drawable.woodpile184),
+//                    LinkedItem("woodpile185.json", R.drawable.woodpile185),
+//                    LinkedItem("woodpile186.json", R.drawable.woodpile186),
+//                    LinkedItem("woodpile188.json", R.drawable.woodpile188),
+//                    LinkedItem("woodpile189.json", R.drawable.woodpile189),
+//                )
+//
+//                val random = item[Random.nextInt(0, item.size)]
 //                    val woodPileData = WoodPileDataConverter.fromJsonFile(context, random.jsonPath)
-                val (imageBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(random.drawableRes)
-                val options = BitmapFactory.Options().apply {
-                    inScaled = false
+//                val (imageBitmap, scalingInfo) = context.createSafeImageBitmapWithScaling(random.drawableRes)
+//                val options = BitmapFactory.Options().apply {
+//                    inScaled = false
+//                }
+//                val bitmap = BitmapFactory.decodeResource(context.resources, random.drawableRes, options)
+//                viewModel.onProcessImage(
+//                    selectedBitmap = bitmap,
+//                    imageBitmap = imageBitmap,
+//                    scalingInfo = scalingInfo,
+//                    jsonFile = random.jsonPath
+//                )
+                val hasPermission = androidx.core.content.ContextCompat
+                    .checkSelfPermission(context, android.Manifest.permission.CAMERA) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                if (hasPermission) {
+                    val uri = createImageUri(context) ?: return@IconButton
+                    currentPhotoUri = uri
+                    takePictureLauncher.launch(uri)
+                } else {
+                    requestCameraPermission.launch(android.Manifest.permission.CAMERA)
                 }
-                val bitmap = BitmapFactory.decodeResource(context.resources, random.drawableRes, options)
-                viewModel.onProcessImage(
-                    selectedBitmap = bitmap,
-                    imageBitmap = imageBitmap,
-                    scalingInfo = scalingInfo,
-                    jsonFile = random.jsonPath
-                )
             },
             modifier = Modifier.size(112.dp)
         ) {
@@ -917,7 +1036,31 @@ fun CaptureImage(
             style = MaterialTheme.typography.titleLarge
         )
     }
-
+// Simple “permission denied” dialog
+    if (showCameraDeniedDialog) {
+        AlertDialog(
+            onDismissRequest = { showCameraDeniedDialog = false },
+            icon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.warning),
+                    contentDescription = "warning",
+                    modifier = Modifier.size(48.dp),
+                    tint = Color.Unspecified
+                )
+            },
+            title = { Text("Izin Kamera dibutuhkan") },
+            text = { Text("Aplikasi memerlukan akses kamera untuk mengambil foto.") },
+            confirmButton = {
+                Button(onClick = {
+                    showCameraDeniedDialog = false
+                    openAppSettings(context)
+                }) { Text("Buka Pengaturan") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showCameraDeniedDialog = false }) { Text("Batal") }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -1119,6 +1262,43 @@ private fun AbnormalityCard(
                 modifier = Modifier.weight(1f)
             )
         }
+    }
+}
+private fun openAppSettings(context: android.content.Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.fromParts("package", context.packageName, null)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(intent)
+}
+
+private fun createImageUri(context: android.content.Context): Uri? {
+    val name = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        .format(System.currentTimeMillis())
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, "IMG_$name.jpg")
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Penalty")
+            put(MediaStore.Images.Media.IS_PENDING, 0)
+        }
+    }
+    return context.contentResolver.insert(
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+        contentValues
+    )
+}
+
+private fun decodeBitmapFromUri(
+    context: android.content.Context,
+    uri: Uri
+): Bitmap? {
+    return if (Build.VERSION.SDK_INT < 28) {
+        @Suppress("DEPRECATION")
+        MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+    } else {
+        val source = ImageDecoder.createSource(context.contentResolver, uri)
+        ImageDecoder.decodeBitmap(source)
     }
 }
 
