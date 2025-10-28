@@ -31,7 +31,7 @@ class PenaltyRepositoryImpl @Inject constructor(
             body = body
         )
 
-        val url = "http://172.17.226.44:5554/penalty-detection/process-image"
+        val url = "https://serviceshub.app.co.id:8443/penalty-detection/process-image"
         emit(client.processImage(url, part))
     }
 }

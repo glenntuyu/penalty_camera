@@ -37,20 +37,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowCircleLeft
 import androidx.compose.material.icons.filled.Camera
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +63,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarColors
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -172,6 +177,7 @@ fun GridTaggingScreenSMDD(
     val showWarnDoubleInputPenalty = remember { mutableStateOf(false) }
     var jsonFile by remember { mutableStateOf<String?>(null) }
     var showNoDetectionDialog by remember { mutableStateOf(false) }
+    var showConfirm by remember { mutableStateOf(false) }
 
 
     Scaffold(
@@ -209,6 +215,16 @@ fun GridTaggingScreenSMDD(
                     actionIconContentColor = Color.White,
                     scrolledContainerColor = BgColor1
                 ),
+            )
+        },
+        floatingActionButton = {
+            if (screenState == ScreenState2.ZOOM)
+            ExtendedFloatingActionButton(
+                text = { Text("Clear Dots") },
+                icon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                onClick = { showConfirm = true },
+                containerColor = Teal,
+                contentColor = Color.White
             )
         }
     ) { innerPadding ->
@@ -363,15 +379,13 @@ fun GridTaggingScreenSMDD(
                     imageBitmap = imageBitmap!!,
                     grid = selectedGrid!!,
                     gridDots = gridDots,
-                    scalingInfo = scalingInfo!!,
-                    onBack = { screenState = ScreenState2.GRID },
                     onTap = { offset, size ->
                         selectedTapOffset = Offset(
                             x = offset.x / size.width,
                             y = offset.y / size.height
                         )
                         showSheet = true
-                    }
+                    },
                 )
 
                 ScreenState2.CROP -> CropImageScreen(
@@ -495,6 +509,24 @@ fun GridTaggingScreenSMDD(
                 screenState = ScreenState2.CAPTURE
             }
         )
+        if (showConfirm) {
+            AlertDialog(
+                onDismissRequest = { showConfirm = false },
+                title = { Text("Clear all dots?") },
+                text = { Text("This will remove every marker from the grid.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            gridDots.removeAll { it.grid == selectedGrid }
+                            showConfirm = false
+                        }
+                    ) { Text("Clear") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirm = false }) { Text("Cancel") }
+                }
+            )
+        }
     }
 }
 
@@ -1302,170 +1334,6 @@ private fun decodeBitmapFromUri(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun GridTaggingScreen(
-    imageBitmap: ImageBitmap,
-    woodPileData: WoodPileData,
-    scalingInfo: ScalingInfo,
-    modifier: Modifier = Modifier
-) {
-    // State management for zoom functionality
-    val gridDots = remember { mutableStateListOf<GridDot>() }
-    var selectedGrid by remember { mutableStateOf<GridRect?>(null) }
-    var selectedTapOffset by remember { mutableStateOf<Offset?>(null) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var showSheet by remember { mutableStateOf(false) }
-
-    var showCropScreen by remember { mutableStateOf(false) }
-    var cropRect by remember { mutableStateOf<Rect?>(null) }
-
-    var showCroppedGrid by remember { mutableStateOf(false) }
-
-    var screenState by remember { mutableStateOf(ScreenState.GRID) }
-
-    // Zoom screen logic
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Penalty") },
-                navigationIcon = {
-                    if (screenState == ScreenState.ZOOM || screenState == ScreenState.CROPPED_ZOOM) {
-                        IconButton(onClick = {
-                            screenState = when (screenState) {
-                                ScreenState.ZOOM -> ScreenState.GRID
-                                ScreenState.CROPPED_ZOOM -> ScreenState.CROPPED_GRID
-                                else -> screenState
-                            }
-                        }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        if (!showCropScreen && !showCroppedGrid) {
-            Box(
-                modifier = modifier
-                    .padding(innerPadding)
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (screenState == ScreenState.ZOOM && selectedGrid != null) {
-                    ZoomedGridScreen(
-                        imageBitmap = imageBitmap,
-                        grid = selectedGrid!!,
-                        gridDots = gridDots,
-                        scalingInfo = scalingInfo,
-                        onBack = { screenState = ScreenState.GRID },
-                        onTap = { offset, size ->
-                            selectedTapOffset = Offset(
-                                x = offset.x / size.width,
-                                y = offset.y / size.height
-                            )
-                            showSheet = true
-                        }
-                    )
-
-                    // Bottom sheet for tag selection
-                    if (showSheet && selectedTapOffset != null) {
-                        ModalBottomSheet(
-                            onDismissRequest = { showSheet = false },
-                            sheetState = sheetState
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            ) {
-                                Text(
-                                    "Pilih Abnormalitas",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                TagType.entries.forEach { tag ->
-                                    Button(
-                                        onClick = {
-                                            gridDots.add(
-                                                GridDot(
-                                                    selectedGrid!!,
-                                                    selectedTapOffset!!,
-                                                    tag
-                                                )
-                                            )
-                                            showSheet = false
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = tag.color)
-                                    ) {
-                                        Text(tag.name)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        GridImage(
-                            modifier = Modifier.weight(1f),
-                            imageBitmap = imageBitmap,
-                            woodPileData = woodPileData,
-                            scalingInfo = scalingInfo,
-                            gridDots = gridDots,
-                            onClickGrid = {
-                                selectedGrid = it
-                                screenState = ScreenState.ZOOM
-                            }
-                        )
-
-                        Button(
-                            onClick = {
-                                showCropScreen = true
-                            },
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text("Re-crop")
-                        }
-                    }
-                }
-            }
-        } else if (showCropScreen) {
-            CropImageScreen(
-                modifier = modifier
-                    .padding(innerPadding),
-                imageBitmap = imageBitmap,
-                onCropConfirmed = { rect ->
-                    cropRect = rect
-                    showCroppedGrid = true
-                    showCropScreen = false
-                },
-                onCancel = { showCropScreen = false }
-
-            )
-        } else if (showCroppedGrid && cropRect != null) {
-            CroppedGridScreen(
-                imageBitmap = imageBitmap,
-                cropRect = cropRect!!,
-                woodPileData = woodPileData,
-                scalingInfo = scalingInfo,
-                screenState = screenState,
-                onScreenStateChange = { screenState = it },
-                onBack = {
-                    showCroppedGrid = false
-                    cropRect = null
-                    screenState = ScreenState.GRID
-                }
-            )
-        }
-    }
-}
-
 @Composable
 fun GridImage(
     modifier: Modifier,
@@ -1631,11 +1499,10 @@ private fun findGridFromData(
 fun ZoomedGridScreen(
     imageBitmap: ImageBitmap,
     grid: GridRect,
-    gridDots: List<GridDot>,
-    scalingInfo: ScalingInfo,
-    onBack: () -> Unit,
-    onTap: (Offset, IntSize) -> Unit
+    gridDots: SnapshotStateList<GridDot>,
+    onTap: (Offset, IntSize) -> Unit,
 ) {
+
     // Safe integer crop rect
     val left = floor(grid.rect.left).toInt().coerceIn(0, imageBitmap.width - 1)
     val top = floor(grid.rect.top).toInt().coerceIn(0, imageBitmap.height - 1)
@@ -1674,99 +1541,6 @@ fun ZoomedGridScreen(
                 color = dot.tagType.color,
                 radius = 20f,
                 center = position
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CroppedGridScreen(
-    modifier: Modifier = Modifier,
-    imageBitmap: ImageBitmap,
-    cropRect: Rect,
-    woodPileData: WoodPileData,
-    scalingInfo: ScalingInfo,
-    screenState: ScreenState,
-    onScreenStateChange: (ScreenState) -> Unit,
-    onBack: () -> Unit
-) {
-    var selectedGrid by remember { mutableStateOf<GridRect?>(null) }
-    var selectedTapOffset by remember { mutableStateOf<Offset?>(null) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var showSheet by remember { mutableStateOf(false) }
-    val gridDots = remember { mutableStateListOf<GridDot>() }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (screenState == ScreenState.CROPPED_ZOOM && selectedGrid != null) {
-            ZoomedGridScreen(
-                imageBitmap = imageBitmap,
-                grid = selectedGrid!!,
-                gridDots = gridDots,
-                scalingInfo = scalingInfo,
-                onBack = {
-                    onScreenStateChange(ScreenState.CROPPED_GRID)
-                },
-                onTap = { offset, size ->
-                    selectedTapOffset = Offset(
-                        x = offset.x / size.width,
-                        y = offset.y / size.height
-                    )
-                    showSheet = true
-                }
-            )
-
-            // Bottom sheet for tag selection
-            if (showSheet && selectedTapOffset != null) {
-                ModalBottomSheet(
-                    onDismissRequest = { showSheet = false },
-                    sheetState = sheetState
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Text("Pilih Abnormalitas", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
-                        TagType.entries.forEach { tag ->
-                            Button(
-                                onClick = {
-                                    gridDots.add(
-                                        GridDot(
-                                            selectedGrid!!,
-                                            selectedTapOffset!!,
-                                            tag
-                                        )
-                                    )
-                                    showSheet = false
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = tag.color)
-                            ) {
-                                Text(tag.name)
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            CroppedGridImage(
-                modifier = Modifier.fillMaxSize(),
-                imageBitmap = imageBitmap,
-                cropRect = cropRect,
-                woodPileData = woodPileData,
-                gridDots = gridDots,
-                onClickGrid = {
-                    selectedGrid = it
-                    onScreenStateChange(ScreenState.CROPPED_ZOOM)
-                }
             )
         }
     }
