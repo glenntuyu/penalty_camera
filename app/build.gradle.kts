@@ -79,6 +79,11 @@ dependencies {
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
+
+    testImplementation(libs.junit)
+    // instrumented tests
+    androidTestImplementation(libs.androidx.junit)           // androidx.test.ext:junit
+    androidTestImplementation(libs.androidx.espresso.core)   // Espresso
 }
 
 kapt {
