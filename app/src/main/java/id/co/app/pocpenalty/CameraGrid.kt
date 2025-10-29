@@ -62,6 +62,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -88,6 +90,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
@@ -175,7 +178,15 @@ fun GridTaggingScreenSMDD(
     val penaltyReport by remember { mutableStateOf(PenaltyReport()) }
     val showWarnMissingPenalty = remember { mutableStateOf(false) }
     val showWarnDoubleInputPenalty = remember { mutableStateOf(false) }
-    var jsonFile by remember { mutableStateOf<String?>(null) }
+    var jsonFile by remember { mutableStateOf("") }
+    var roundOff by remember { mutableStateOf(false) }
+
+    fun resetData() {
+        selectedGrid = null
+        selectedTapOffset = null
+        gridDots.clear()
+        cropRect = null
+    }
     var showNoDetectionDialog by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
 
@@ -271,11 +282,10 @@ fun GridTaggingScreenSMDD(
                             woodPileData = result.value
                             imageBitmap = result.imageBitmap
                             scalingInfo = result.scalingInfo
-                            jsonFile = result.jsonFile
 
                             // 👇 Check for detection
                             val hasDetection =
-                                woodPileData?.detectionBox != null && woodPileData?.gridLines != null
+                                woodPileData?.detectionBox != null
 
                             viewModel.capture()
                             if (!hasDetection) {
@@ -298,10 +308,22 @@ fun GridTaggingScreenSMDD(
                         scalingInfo = scalingInfo!!,
                         gridDots = gridDots,
                         onClickGrid = {
+                            if (it == null) return@GridImage
                             selectedGrid = it
                             screenState = ScreenState2.ZOOM
                         },
-                        cropRect = cropRect
+                        cropRect = cropRect,
+                        roundOff = roundOff,
+                    )
+
+                    ResetCrop { resetData() }
+
+                    RoundOffToggle(
+                        checked = roundOff,
+                        onCheckedChange = {
+                            roundOff = it
+                            gridDots.clear()
+                        },
                     )
 
                     Box(
@@ -321,26 +343,26 @@ fun GridTaggingScreenSMDD(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Left: white pill – "Retake"
-//                                OutlinedButton(
-//                                    onClick = { screenState = ScreenState2.CROP },
-//                                    shape = Pill,
-//                                    modifier = Modifier
-//                                        .weight(1f)
-//                                        .height(48.dp),
-//                                    colors = ButtonDefaults.outlinedButtonColors(
-//                                        containerColor = Color.White,
-//                                        contentColor = Teal
-//                                    ),
-//                                    border = BorderStroke(1.dp, SolidColor(Teal))
-//                                ) {
-//                                    Icon(
-//                                        imageVector = Icons.Filled.Refresh,
-//                                        contentDescription = "Recrop",
-//                                        modifier = Modifier.size(24.dp)
-//                                    )
-//                                    Spacer(Modifier.width(8.dp))
-//                                    Text("Retake", fontWeight = FontWeight.Medium)
-//                                }
+                                OutlinedButton(
+                                    onClick = { screenState = ScreenState2.CROP },
+                                    shape = Pill,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Color.White,
+                                        contentColor = Teal
+                                    ),
+                                    border = BorderStroke(1.dp, SolidColor(Teal))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Refresh,
+                                        contentDescription = "Recrop",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Retake", fontWeight = FontWeight.Medium)
+                                }
 
                                 // Right: teal pill – "Lihat Laporan"
                                 Button(
@@ -1342,7 +1364,8 @@ fun GridImage(
     scalingInfo: ScalingInfo,
     gridDots: SnapshotStateList<GridDot>,
     onClickGrid: (gridRect: GridRect?) -> Unit,
-    cropRect: Rect? = null
+    cropRect: Rect? = null,
+    roundOff: Boolean = false,
 ) {
     var drawParams by remember { mutableStateOf<ImageDrawParams?>(null) }
 
@@ -1358,7 +1381,29 @@ fun GridImage(
                         val y =
                             ((tap.y - p.top) / p.scale).coerceIn(0f, imageBitmap.height.toFloat())
 
-                        val grid = findGridFromData(Offset(x, y), woodPileData, scalingInfo)
+                        val grid = if (!roundOff)
+                            if (cropRect == null) {
+                                findGridFromData(Offset(x, y), woodPileData, scalingInfo)
+                            } else {
+                                findGridFromCropRect(
+                                    Offset(x, y),
+                                    woodPileData,
+                                    scalingInfo,
+                                    cropRect
+                                )
+                            }
+                        else {
+                            if (cropRect == null) {
+                                findRoundedGrid(Offset(x, y), woodPileData, scalingInfo)
+                            } else {
+                                findRoundedGridFromCropRect(
+                                    Offset(x, y),
+                                    woodPileData,
+                                    scalingInfo,
+                                    cropRect
+                                )
+                            }
+                        }
                         onClickGrid(grid)
                     }
                 }
@@ -1396,43 +1441,36 @@ fun GridImage(
             val rectH = bottomRight.y - topLeft.y
 
             // draw provided grid lines (yellow)
-            woodPileData.gridLines.vertical.forEach { line ->
-                drawLine(
-                    color = Color.Yellow,
-                    start = Offset(
-                        line.p1[0].toFloat() * scalingInfo.scaleX,
-                        line.p1[1].toFloat() * scalingInfo.scaleY
-                    ),
-                    end = Offset(
-                        line.p2[0].toFloat() * scalingInfo.scaleX,
-                        line.p2[1].toFloat() * scalingInfo.scaleY
-                    ),
-                    strokeWidth = stroke
-                )
-            }
-            woodPileData.gridLines.horizontal.forEach { line ->
-                drawLine(
-                    color = Color.Yellow,
-                    start = Offset(
-                        line.p1[0].toFloat() * scalingInfo.scaleX,
-                        line.p1[1].toFloat() * scalingInfo.scaleY
-                    ),
-                    end = Offset(
-                        line.p2[0].toFloat() * scalingInfo.scaleX,
-                        line.p2[1].toFloat() * scalingInfo.scaleY
-                    ),
-                    strokeWidth = stroke
-                )
+            if (!roundOff) {
+                if (cropRect == null) {
+                    drawGridFromData(woodPileData, scalingInfo, stroke)
+                } else {
+                    drawCroppedGrid(woodPileData, scalingInfo, stroke, cropRect)
+                }
+            } else {
+                if (cropRect == null) {
+                    drawRoundedGrid(woodPileData, scalingInfo, stroke)
+                } else {
+                    drawRoundedCroppedGrid(woodPileData, scalingInfo, stroke, cropRect)
+                }
             }
 
             // detection outline (red)
-            drawRect(
-                color = Color.Red,
-                topLeft = topLeft,
-                size = Size(rectW, rectH),
-                style = Stroke(width = stroke * 2)
-            )
-
+            if (cropRect == null) {
+                drawRect(
+                    color = Color.Red,
+                    topLeft = topLeft,
+                    size = Size(rectW, rectH),
+                    style = Stroke(width = stroke * 2)
+                )
+            } else {
+                drawRect(
+                    color = Color.Red,
+                    topLeft = Offset(cropRect.left, cropRect.top),
+                    size = Size(cropRect.width, cropRect.height),
+                    style = Stroke(width = stroke * 2)
+                )
+            }
 
             // dots (common)
             gridDots.forEach { dot ->
@@ -1446,13 +1484,6 @@ fun GridImage(
         }
     }
 }
-
-// Helper data class for tap mapping
-data class ImageDrawParams(
-    val left: Float,
-    val top: Float,
-    val scale: Float
-)
 
 // Updated helper function to find grid cell from data with scaling info
 private fun findGridFromData(
@@ -1494,6 +1525,345 @@ private fun findGridFromData(
 
     return null
 }
+
+fun findGridFromCropRect(
+    tapOffset: Offset,
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo,
+    cropRect: Rect,
+): GridRect? {
+    val pxPerMeter = woodPileData.pxPerMeter.toFloat()
+
+    val originalX = tapOffset.x / scalingInfo.scaleX
+    val originalY = tapOffset.y / scalingInfo.scaleY
+
+    val cropLeft = cropRect.left / scalingInfo.scaleX
+    val cropTop = cropRect.top / scalingInfo.scaleY
+
+    val width = cropRect.width / scalingInfo.scaleX
+    val height = cropRect.height / scalingInfo.scaleY
+
+    val cellWidth = width / (width / pxPerMeter)
+    val cellHeight = height / (height / pxPerMeter)
+
+    val col = ((originalX - cropLeft) / cellWidth).toInt()
+    val row = ((originalY - cropTop) / cellHeight).toInt()
+
+    val left = cropLeft + col * cellWidth
+    val top = cropTop + row * cellHeight
+    val right = left + cellWidth
+    val bottom = top + cellHeight
+
+    return GridRect(
+        row = row,
+        col = col,
+        rect = Rect(
+            Offset(left * scalingInfo.scaleX, top * scalingInfo.scaleY),
+            Offset(right * scalingInfo.scaleX, bottom * scalingInfo.scaleY)
+        )
+    )
+}
+
+private fun findRoundedGrid(
+    tapOffset: Offset,
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo
+): GridRect? {
+    val pxPerMeter = woodPileData.pxPerMeter.toFloat()
+
+    // original image coords
+    val originalX = tapOffset.x / scalingInfo.scaleX
+    val originalY = tapOffset.y / scalingInfo.scaleY
+
+    val left = woodPileData.detectionBox.topLeft[0].toFloat()
+    val top = woodPileData.detectionBox.topLeft[1].toFloat()
+    val right = woodPileData.detectionBox.bottomRight[0].toFloat()
+    val bottom = woodPileData.detectionBox.bottomRight[1].toFloat()
+
+    if (originalX !in left..right || originalY !in top..bottom) return null
+
+    val width = right - left
+    val height = bottom - top
+
+    val colCount = floor(width / pxPerMeter).toInt()
+    val rowCount = floor(height / pxPerMeter).toInt()
+
+    val cellWidth = width / colCount
+    val cellHeight = height / rowCount
+
+    val col = ((originalX - left) / cellWidth).toInt().coerceIn(0, colCount - 1)
+    val row = ((originalY - top) / cellHeight).toInt().coerceIn(0, rowCount - 1)
+
+    val cellLeft = left + col * cellWidth
+    val cellTop = top + row * cellHeight
+    val cellRight = cellLeft + cellWidth
+    val cellBottom = cellTop + cellHeight
+
+    return GridRect(
+        row = row,
+        col = col,
+        rect = Rect(
+            Offset(cellLeft * scalingInfo.scaleX, cellTop * scalingInfo.scaleY),
+            Offset(cellRight * scalingInfo.scaleX, cellBottom * scalingInfo.scaleY)
+        )
+    )
+}
+
+fun findRoundedGridFromCropRect(
+    tapOffset: Offset,
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo,
+    cropRect: Rect,
+): GridRect? {
+    val pxPerMeter = woodPileData.pxPerMeter.toFloat()
+
+    val originalX = tapOffset.x / scalingInfo.scaleX
+    val originalY = tapOffset.y / scalingInfo.scaleY
+
+    val cropLeft = cropRect.left / scalingInfo.scaleX
+    val cropTop = cropRect.top / scalingInfo.scaleY
+
+    val width = cropRect.width / scalingInfo.scaleX
+    val height = cropRect.height / scalingInfo.scaleY
+
+    val verticalLineCount = floor(width / pxPerMeter).toInt()
+    val horizontalLineCount = floor(height / pxPerMeter).toInt()
+
+    val cellWidth = width / verticalLineCount
+    val cellHeight = height / horizontalLineCount
+
+    val col = ((originalX - cropLeft) / cellWidth).toInt()
+    val row = ((originalY - cropTop) / cellHeight).toInt()
+
+    val left = cropLeft + col * cellWidth
+    val top = cropTop + row * cellHeight
+    val right = left + cellWidth
+    val bottom = top + cellHeight
+
+    return GridRect(
+        row = row,
+        col = col,
+        rect = Rect(
+            Offset(left * scalingInfo.scaleX, top * scalingInfo.scaleY),
+            Offset(right * scalingInfo.scaleX, bottom * scalingInfo.scaleY)
+        )
+    )
+}
+
+private fun DrawScope.drawGridFromData(
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo,
+    stroke: Float,
+) {
+    woodPileData.gridLines.vertical.forEach { line ->
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(
+                line.p1[0].toFloat() * scalingInfo.scaleX,
+                line.p1[1].toFloat() * scalingInfo.scaleY
+            ),
+            end = Offset(
+                line.p2[0].toFloat() * scalingInfo.scaleX,
+                line.p2[1].toFloat() * scalingInfo.scaleY
+            ),
+            strokeWidth = stroke
+        )
+    }
+    woodPileData.gridLines.horizontal.forEach { line ->
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(
+                line.p1[0].toFloat() * scalingInfo.scaleX,
+                line.p1[1].toFloat() * scalingInfo.scaleY
+            ),
+            end = Offset(
+                line.p2[0].toFloat() * scalingInfo.scaleX,
+                line.p2[1].toFloat() * scalingInfo.scaleY
+            ),
+            strokeWidth = stroke
+        )
+    }
+}
+
+fun DrawScope.drawCroppedGrid(
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo,
+    stroke: Float,
+    cropRect: Rect
+) {
+    val pxPerMeter = woodPileData.pxPerMeter.toFloat()
+
+    val width = cropRect.width / scalingInfo.scaleX
+    val height = cropRect.height / scalingInfo.scaleY
+
+    val verticalLineCount = (width / pxPerMeter).toInt()
+    val horizontalLineCount = (height / pxPerMeter).toInt()
+
+    val cellWidth = width / (width / pxPerMeter)
+    val cellHeight = height / (height / pxPerMeter)
+
+    for (i in 1..verticalLineCount) {
+        val x = cropRect.left + i * cellWidth * scalingInfo.scaleX
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(x, cropRect.top),
+            end = Offset(x, cropRect.bottom),
+            strokeWidth = stroke
+        )
+    }
+    for (j in 1..horizontalLineCount) {
+        val y = cropRect.top + j * cellHeight * scalingInfo.scaleY
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(cropRect.left, y),
+            end = Offset(cropRect.right, y),
+            strokeWidth = stroke
+        )
+    }
+}
+
+private fun DrawScope.drawRoundedGrid(
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo,
+    stroke: Float,
+) {
+    val pxPerMeter = woodPileData.pxPerMeter.toFloat()
+
+    val boxLeft = woodPileData.detectionBox.topLeft[0].toFloat()
+    val boxTop = woodPileData.detectionBox.topLeft[1].toFloat()
+    val boxRight = woodPileData.detectionBox.bottomRight[0].toFloat()
+    val boxBottom = woodPileData.detectionBox.bottomRight[1].toFloat()
+
+    val boxWidth = boxRight - boxLeft
+    val boxHeight = boxBottom - boxTop
+
+    // Use floor to ensure each cell is at least pxPerMeter wide/high
+    val verticalLineCount = floor(boxWidth / pxPerMeter).toInt()
+    val horizontalLineCount = floor(boxHeight / pxPerMeter).toInt()
+
+    val stepX = boxWidth / verticalLineCount
+    val stepY = boxHeight / horizontalLineCount
+
+    // Draw vertical lines
+    for (i in 1 until verticalLineCount) {
+        val x = (boxLeft + i * stepX) * scalingInfo.scaleX
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(x, boxTop * scalingInfo.scaleY),
+            end = Offset(x, boxBottom * scalingInfo.scaleY),
+            strokeWidth = stroke
+        )
+    }
+
+    // Draw horizontal lines
+    for (j in 1 until horizontalLineCount) {
+        val y = (boxTop + j * stepY) * scalingInfo.scaleY
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(boxLeft * scalingInfo.scaleX, y),
+            end = Offset(boxRight * scalingInfo.scaleX, y),
+            strokeWidth = stroke
+        )
+    }
+}
+
+fun DrawScope.drawRoundedCroppedGrid(
+    woodPileData: WoodPileData,
+    scalingInfo: ScalingInfo,
+    stroke: Float,
+    cropRect: Rect
+) {
+    val pxPerMeter = woodPileData.pxPerMeter.toFloat()
+
+    val width = cropRect.width / scalingInfo.scaleX
+    val height = cropRect.height / scalingInfo.scaleY
+
+    val verticalLineCount = floor(width / pxPerMeter).toInt()
+    val horizontalLineCount = floor(height / pxPerMeter).toInt()
+
+    val cellWidth = width / verticalLineCount
+    val cellHeight = height / horizontalLineCount
+
+    for (i in 1 until verticalLineCount) {
+        val x = cropRect.left + i * cellWidth * scalingInfo.scaleX
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(x, cropRect.top),
+            end = Offset(x, cropRect.bottom),
+            strokeWidth = stroke
+        )
+    }
+    for (j in 1 until horizontalLineCount) {
+        val y = cropRect.top + j * cellHeight * scalingInfo.scaleY
+        drawLine(
+            color = Color.Yellow,
+            start = Offset(cropRect.left, y),
+            end = Offset(cropRect.right, y),
+            strokeWidth = stroke
+        )
+    }
+}
+
+@Composable
+fun ResetCrop(
+    modifier: Modifier = Modifier,
+    onReset: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onReset,
+        shape = Pill,
+        modifier = Modifier
+            .height(48.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = Color.White,
+            contentColor = Teal
+        ),
+        border = BorderStroke(1.dp, SolidColor(Teal))
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Refresh,
+            contentDescription = "Reset",
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text("Reset", fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun RoundOffToggle(
+    modifier: Modifier = Modifier,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+            .padding(8.dp)
+    ) {
+        Text(
+            text = "Round Off",
+            color = Black,
+        )
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.Green,
+                uncheckedThumbColor = Color.Gray
+            )
+        )
+    }
+}
+
+// Helper data class for tap mapping
+data class ImageDrawParams(
+    val left: Float,
+    val top: Float,
+    val scale: Float
+)
 
 @Composable
 fun ZoomedGridScreen(

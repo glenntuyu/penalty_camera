@@ -39,7 +39,7 @@ fun CropImageScreen(
     modifier: Modifier = Modifier,
     imageBitmap: ImageBitmap,
     onCropConfirmed: (Rect) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
     var cropRect by remember { mutableStateOf<Rect?>(null) }
     var isDragging by remember { mutableStateOf(false) }
@@ -47,8 +47,7 @@ fun CropImageScreen(
     var dragStartOffset by remember { mutableStateOf(Offset.Zero) }
     var initialCropRect by remember { mutableStateOf<Rect?>(null) }
 
-    // Store canvas size and scaling info
-    var canvasSize by remember { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
+    // Store scaling info
     var imageScale by remember { mutableStateOf(1f) }
     var imageLeft by remember { mutableStateOf(0f) }
     var imageTop by remember { mutableStateOf(0f) }
@@ -189,9 +188,6 @@ fun CropImageScreen(
                     )
                 }
         ) {
-            // Store canvas size
-            canvasSize = size
-
             // Calculate scale and position to center image
             val scale = minOf(
                 size.width / imageBitmap.width,
